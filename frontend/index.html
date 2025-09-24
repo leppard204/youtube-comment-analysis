@@ -33,6 +33,12 @@
             font-size: 1.5rem;
             color: #ffffff;
             font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.3s ease;
+        }
+
+        .header h1:hover {
+            opacity: 0.8;  /* 호버 시 살짝 투명해짐 */
         }
 
         .main-container {
@@ -128,7 +134,7 @@
         }
 
         .analysis-btn.active {
-            background: linear-gradient(45deg, #667eea, #764ba2);
+            background: linear-gradient(45deg, #363636, #5e5e5e);
             color: white;
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
             transform: translateY(-2px);
@@ -143,7 +149,7 @@
         .start-btn {
             padding: 1rem 3rem;
             font-size: 1.1rem;
-            background: linear-gradient(45deg, #28a745, #20c997);
+            background: linear-gradient(45deg, #a74128, #c99320);
             color: white;
             border: none;
             border-radius: 30px;
@@ -153,7 +159,7 @@
             opacity: 0;
             transform: translateY(30px);
             pointer-events: none;
-            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+            box-shadow: 0 8px 25px rgba(167, 70, 40, 0.3);
         }
 
         .start-btn.show {
@@ -164,7 +170,7 @@
 
         .start-btn:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 35px rgba(40, 167, 69, 0.4);
+            box-shadow: 0 12px 35px rgba(167, 59, 40, 0.4);
         }
 
         .footer {
@@ -267,7 +273,7 @@
 </head>
 <body>
     <header class="header">
-        <h1>LDB</h1>
+        <h1 onclick="location.reload()">LDB</h1>
     </header>
 
     <main class="main-container">
@@ -406,17 +412,16 @@
                 return;
             }
             
-            // 로딩 표시
-            startBtn.style.visibility = 'hidden';           
+            // 버튼을 즉시 숨기고 로딩 표시
+            startBtn.style.display = 'none';
             loading.style.display = 'block';
-
             
             // 실제 서버 요청 시뮬레이션
             setTimeout(() => {
                 
-                // 로딩 숨기기
+                // 로딩 숨기고 버튼 다시 표시
                 loading.style.display = 'none';
-                startBtn.style.visibility = 'visible';
+                startBtn.style.display = 'block';
                 
                 // 실제 구현에서는 여기서 서버로 데이터를 전송합니다
                 console.log('Sending to server:', {
