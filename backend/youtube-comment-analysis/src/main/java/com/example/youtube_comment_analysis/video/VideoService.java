@@ -2,25 +2,34 @@ package com.example.youtube_comment_analysis.video;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 
+import com.example.youtube_comment_analysis.AiSender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.netty.handler.timeout.TimeoutException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
-@RequiredArgsConstructor
+@Slf4j
 public class VideoService {
-
-	private final WebClient webClient;
-	private static final String YT_BASE = "https://www.googleapis.com/youtube/v3";
+	
+	private final WebClient yt;
+	private final AiSender aiSender;
+	
+	public VideoService(@Qualifier("youtubeWebClient") WebClient yt, AiSender aiSender) {
+        this.yt = yt;
+        this.aiSender = aiSender;
+    }
 	
 	@Value("${youtube.api.key}")
 	private String apikey;
@@ -30,13 +39,12 @@ public class VideoService {
 	public VideoResponse getVideoData(String videoId, int limit) {
 		try {
 			//영상 데이터
-			String videoUrl = YT_BASE + "/videos"
-                    + "?part=snippet,statistics"
-                    + "&id=" + videoId
-                    + "&key=" + apikey;
-			
-			String videoJson = webClient.get()
-                    .uri(videoUrl)
+			String videoJson = yt.get()
+                    .uri(b->b.path("/videos")
+                    		.queryParam("part", "snippet,statistics")
+                    		.queryParam("id", videoId)
+                    		.queryParam("key", apikey)
+                    		.build())
                     .retrieve()
                     .onStatus(HttpStatusCode::is4xxClientError, res ->
                     res.bodyToMono(String.class)
@@ -76,17 +84,17 @@ public class VideoService {
             
             while (remain > 0) {
                 int pageSize = Math.min(100, remain);  // 100건 씩 돌면서 갖고옴
-                String ctUrl = YT_BASE + "/commentThreads"
-                        + "?part=snippet,replies"
-                        + "&textFormat=plainText"
-                        + "&order=time"
-                        + "&maxResults=" + pageSize
-                        + "&videoId=" + videoId
-                        + (pageToken != null ? "&pageToken=" + pageToken : "")
-                        + "&key=" + apikey;
-
-                String ctJson = webClient.get()
-                        .uri(ctUrl)
+                final String token = pageToken;
+                String ctJson = yt.get()
+                        .uri(b->b.path("/commentThreads")
+                        		.queryParam("part", "snippet,replies")
+                        		.queryParam("textFormat", "plainText")
+                                .queryParam("order", "time")
+                                .queryParam("maxResults", pageSize)
+                                .queryParam("videoId", videoId)
+                                .queryParam("key", apikey)
+                                .queryParamIfPresent("pageToken", Optional.ofNullable(token))
+                                .build())
                         .retrieve()
                         .onStatus(HttpStatusCode::is4xxClientError, res ->
                         res.bodyToMono(String.class)
@@ -126,7 +134,13 @@ public class VideoService {
                 if (pageToken == null) 
                 	break; 
             }
-
+            var commentList = comments.stream()
+            		.map(c->new AiSender.CommentLite(c.getCommentId(), c.getText()))
+            		.toList();
+            var sendResult = aiSender.send(commentList);
+            log.info("FastAPI sendOnly result: success={}, clientError={}, otherError={}",
+                    sendResult.success(), sendResult.clientError(), sendResult.otherError());
+            
             resp.setComments(comments);
             return resp;
 		}
