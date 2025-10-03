@@ -21,20 +21,9 @@ public class VideoController {
 	@Value("${app.youtube.fetch-count:1000}")
 	private int fetchCount;
 
-	// 단순 조회: limit 미지정 시 fetchCount 사용, 지정 시 100~fetchCount 범위로 정규화
+	
 	@GetMapping("/{videoId}")
-	public ResponseEntity<?> getVideoData(@PathVariable("videoId") String videoId,
-										  @RequestParam(name = "limit", required = false) Integer limit) {
-
-		int requested  = (limit == null ? fetchCount : limit);
-		int normalized = Math.min(fetchCount, Math.max(100, requested));
-
-		return ResponseEntity.ok(videoService.getVideoData(videoId, normalized));
-	}
-
-	// 사용자 활동 분석 엔드포인트
-	@GetMapping("/{videoId}/analysis")
-	public ResponseEntity<AnalysisDto> getVideoAnalysis(@PathVariable("videoId") String videoId) {
-		return ResponseEntity.ok(videoService.analyzeCommentsActivity(videoId));
+	public ResponseEntity<?> getVideoData(@PathVariable("videoId") String videoId) {
+		return ResponseEntity.ok(videoService.getVideoData(videoId, fetchCount));
 	}
 }

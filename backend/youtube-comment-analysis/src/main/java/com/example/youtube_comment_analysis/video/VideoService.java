@@ -132,7 +132,8 @@ public class VideoService {
                 pageToken = croot.path("nextPageToken").isMissingNode() ? null : croot.path("nextPageToken").asText(null);
                 remain -= pageSize;
 
-                if (pageToken == null) break;
+                if (pageToken == null) 
+                	break;
             }
 
             // --- AI Sender 호출 (FastAPI와 연동) ---
@@ -142,7 +143,15 @@ public class VideoService {
             var sendResult = aiSender.send(commentList);
             log.info("FastAPI sendOnly result: success={}, clientError={}, otherError={}",
                     sendResult.success(), sendResult.clientError(), sendResult.otherError());
-
+            
+            //테스트 코드
+            List<Integer> list=analyzeCommentsActivity(comments).getTopActiveHours();
+            
+            for(int l:list) {
+            	System.out.println(l);
+            }
+          //테스트 코드
+            
             resp.setComments(comments);
             return resp;
         } catch (WebClientRequestException e) {
@@ -155,10 +164,8 @@ public class VideoService {
     }
 
     // --- 추가: 댓글 활동 분석 ---
-    public AnalysisDto analyzeCommentsActivity(String videoId) {
-        // 댓글 최대 2000개 가져오기
-        List<CommentDto> comments = getVideoData(videoId, 2000).getComments();
-
+    public AnalysisDto analyzeCommentsActivity(List<CommentDto> comments) {
+        
         if (comments == null || comments.isEmpty()) {
             return AnalysisDto.builder()
                     .hourlyCommentCount(List.of(new Integer[24])) // 24시간 0으로 초기화
