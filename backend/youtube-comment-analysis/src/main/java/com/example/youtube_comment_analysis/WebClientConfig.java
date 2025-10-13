@@ -2,6 +2,7 @@ package com.example.youtube_comment_analysis;
 
 import java.time.Duration;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -14,21 +15,41 @@ import reactor.netty.http.client.HttpClient;
 
 @Configuration
 public class WebClientConfig {
+	@Bean
+    public reactor.netty.resources.ConnectionProvider youtubePool() {
+        return reactor.netty.resources.ConnectionProvider.builder("yt-pool")
+                .maxConnections(200)
+                .pendingAcquireMaxCount(1000)
+                .pendingAcquireTimeout(Duration.ofSeconds(2))
+                .maxIdleTime(Duration.ofSeconds(30))
+                .build();
+    }
 	
-    @Bean
-    public WebClient webClient(WebClient.Builder builder) {
-    	HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // TCP 연결 타임아웃 (5초)
-                .responseTimeout(Duration.ofSeconds(5))              // 응답 타임아웃 (5초)
+	@Bean(name = "youtubeHttpClient")
+    public HttpClient youtubeHttpClient(reactor.netty.resources.ConnectionProvider youtubePool) {
+        return HttpClient.create(youtubePool)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .responseTimeout(Duration.ofSeconds(5))
                 .doOnConnected(conn ->
-                        conn.addHandlerLast(new ReadTimeoutHandler(5))   // 읽기 타임아웃 (5초)
-                            .addHandlerLast(new WriteTimeoutHandler(5))) // 쓰기 타임아웃 (5초)
-                .keepAlive(true); 
-    	
-    	return builder
+                        conn.addHandlerLast(new ReadTimeoutHandler(5))
+                            .addHandlerLast(new WriteTimeoutHandler(5)))
+                .keepAlive(true);
+    }
+	
+	@Bean(name = "youtubeWebClient")
+    public WebClient youtubeWebClient(@org.springframework.beans.factory.annotation.Qualifier("youtubeHttpClient") HttpClient httpClient) {
+        return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .baseUrl("https://www.googleapis.com/youtube/v3") // 기본 URL 지정 (선택)
-                .defaultHeader("Accept", "application/json")      // 기본 헤더 (선택)
+                .baseUrl("https://www.googleapis.com/youtube/v3")
+                .defaultHeader("Accept", "application/json")
+                .build();
+    }
+	
+	@Bean(name = "fastApiWebClient")
+    public WebClient fastApiWebClient(@Value("${fastapi.base-url}") String fastApiBaseUrl) {
+        return WebClient.builder()
+                .baseUrl(fastApiBaseUrl)
+                .defaultHeader("Accept", "application/json")
                 .build();
     }
 }
