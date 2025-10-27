@@ -23,7 +23,8 @@ public class VideoController {
 
 	
 	@GetMapping("/{videoId}")
-	public ResponseEntity<?> getVideoData(@PathVariable("videoId") String videoId) {
+	public ResponseEntity<?> getVideoData(
+            @PathVariable("videoId") String videoId ) {
 		return ResponseEntity.ok(videoService.getVideoData(videoId, fetchCount));
 	}
 }
