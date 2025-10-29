@@ -1,4 +1,4 @@
-package com.example.youtube_comment_analysis;
+package com.example.youtube_comment_analysis.ai;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -42,14 +42,14 @@ public class AiSender {
 	@Value("${fastapi.max-batch:500}")
     private int maxBatch;
 	
+	//ai서버에 댓글 전송 함수
 	public SendResult send(List<CommentDto> allComments) {
 		if (allComments == null || allComments.isEmpty()) {
-            return new SendResult(List.of(), 0, List.of());
+            return new SendResult(List.of(), List.of(), 0,0,0);
         }
 			
 		List<List<CommentDto>> batches = chunk(allComments, Math.max(1, maxBatch));
 		
-		int totalBots=0;
 	    Map<String, Integer> globalKeyword=new HashMap<>(256);
 	    Set<String> seenIds=new HashSet<>();
 	    List<CommentDto> keptAll=new ArrayList<>();
@@ -80,7 +80,7 @@ public class AiSender {
 		                .bodyValue(req)
 		                .retrieve()
 		                .toEntity(AiSentimentResponse.class)
-		                .timeout(Duration.ofMillis(timeoutMs))
+		                //.timeout(Duration.ofMillis(timeoutMs))
 		                .block();
 				
 				int code=resp!=null ? resp.getStatusCode().value() : -1;
@@ -94,11 +94,10 @@ public class AiSender {
 					
 	                AiSentimentResponse body = resp.getBody();
 	                
-	                totalBots += (body.detectedBotCount() != null ? body.detectedBotCount() : 0);
-	                
 	                if (body.topKeyword() != null) {
 	                    for (KeywordCount kc : body.topKeyword()) {
-	                        if (kc == null || kc.keyword() == null) continue;
+	                        if (kc == null || kc.keyword() == null) 
+	                        	continue;
 	                        String key = kc.keyword().trim();
 	                        int add = Math.max(0, kc.count());
 	                        globalKeyword.merge(key, add, Integer::sum);
@@ -168,14 +167,27 @@ public class AiSender {
 		log.info("분류 완료 reqId={} total={} predicted={} ok={} 4xx={} other={}",
 	            requestId, allComments.size(), predicted, ok, fail4xx, failOther);
 		
-		final int TOP_N = 20;
-	    List<KeywordCount> topKeywordGlobal = globalKeyword.entrySet().stream()
-	        .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-	        .limit(TOP_N)
-	        .map(e -> new KeywordCount(e.getKey(), e.getValue()))
-	        .toList();
+		//댓글 집계
+		List<CommentDto> topLikedFlattened=getGlobalComments(keptAll);
 		
-	    return new SendResult(keptAll, totalBots, topKeywordGlobal);
+		//키워드 집계
+	    List<KeywordCount> topKeywordGlobal=getGlobalKeyword(globalKeyword, 3);
+	    
+	    //감정 비율 집개
+	    int pos = 0, neu = 0, neg = 0;
+	    for (CommentDto c : keptAll) {
+	        Integer p = c.getPrediction();
+	        if (p == null) 
+	        	continue;
+	        if (p == 2) 
+	        	pos++;
+	        else if (p == 1) 
+	        	neu++;
+	        else if (p == 0) 
+	        	neg++;
+	    }
+		
+	    return new SendResult(topLikedFlattened, topKeywordGlobal, pos, neu, neg);
 	}
 	 
 	 private static List<List<CommentDto>> chunk(List<CommentDto> list, int size) {
@@ -201,4 +213,42 @@ public class AiSender {
 	            return UUID.randomUUID().toString();
 	        }
 	    }
+	 
+	 
+	 //키워드 집계 함수
+	 public static List<KeywordCount> getGlobalKeyword(Map<String, Integer> globalKeyword,int top_N){
+		 List<KeywordCount> topKeywordGlobal = globalKeyword.entrySet().stream()
+				 .sorted(Map.Entry.<String,Integer>comparingByValue(Comparator.reverseOrder())
+				         .thenComparing(Map.Entry::getKey))
+				 .limit(top_N)
+				 .map(e -> new KeywordCount(e.getKey(), e.getValue()))
+				 .toList();
+		 return topKeywordGlobal;
+	 }
+	 
+	 //댓글 집계
+	 public static List<CommentDto> getGlobalComments(List<CommentDto> allComments){
+		 Comparator<CommentDto> byLikeDescThenTimeThenId =
+				 Comparator.comparingLong((CommentDto c) -> c.getLikeCount() == null ? 0L : c.getLikeCount())
+				 	.reversed()
+				 	.thenComparing(CommentDto::getPublishedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+				 	.thenComparing(CommentDto::getCommentId, Comparator.nullsLast(Comparator.naturalOrder()));
+
+		 Map<Integer, List<CommentDto>> topLiked =
+				 allComments.stream()
+				 .filter(c -> c != null && c.getPrediction() != null)
+				 .collect(Collectors.groupingBy(
+						 CommentDto::getPrediction,
+						 Collectors.collectingAndThen(
+								 Collectors.toList(),
+								 list -> list.stream().sorted(byLikeDescThenTimeThenId).limit(10).toList()
+								 )
+						 ));
+		 List<CommentDto> topLikedFlattened =
+				    java.util.stream.Stream.of(0, 1, 2)
+				        .flatMap(p -> topLiked.getOrDefault(p, List.of()).stream())
+				        .toList();
+		 
+		 return topLikedFlattened;
+	 }
 }
